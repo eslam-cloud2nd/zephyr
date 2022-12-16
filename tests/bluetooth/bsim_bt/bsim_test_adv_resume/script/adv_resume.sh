@@ -34,7 +34,7 @@ bsim_central_peripheral_exe_name="bs_nrf52_bsim_bluetooth_central_peripheral"
 
 cd ${testing_apps_loc}
 
-if [ ! -d "${central_app_name}" -o ! -d "${peripheral_app_name}" -o ! -f "${central_peripheral_name}" ]; then
+if [ ! -d "${central_app_name}" -o ! -d "${peripheral_app_name}" -o ! -d "${central_peripheral_name}" ]; then
     echo -e "ERR! \e[91mOne or more test applications couldn't be found\e[39m"
     exit 1
 fi
