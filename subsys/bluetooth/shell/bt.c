@@ -36,6 +36,7 @@
 #include <zephyr/bluetooth/audio/csip.h>
 
 #include <zephyr/shell/shell.h>
+#include <zephyr/sys/printk.h>
 
 #include "bt.h"
 #include "ll.h"
@@ -303,15 +304,10 @@ static void adv_connected(struct bt_le_ext_adv *adv,
 #if defined(CONFIG_BT_PRIVACY)
 static bool adv_rpa_expired(struct bt_le_ext_adv *adv)
 {
-	uint8_t adv_index = bt_le_ext_adv_get_index(adv);
+	shell_print(ctx_shell, "Advertiser[%d] %p RPA expired",
+                   bt_le_ext_adv_get_index(adv), adv);
 
-	bool keep_rpa = atomic_test_bit(adv_set_opt[adv_index],
-					  SHELL_ADV_OPT_KEEP_RPA);
-	shell_print(ctx_shell, "Advertiser[%d] %p RPA %s",
-		    adv_index, adv,
-		    keep_rpa ? "not expired" : "expired");
-
-	return keep_rpa;
+              return true;
 }
 #endif /* defined(CONFIG_BT_PRIVACY) */
 
@@ -383,9 +379,9 @@ static void print_le_oob(const struct shell *sh, struct bt_le_oob *oob)
 	bin2hex(oob->le_sc_data.c, sizeof(oob->le_sc_data.c), c, sizeof(c));
 	bin2hex(oob->le_sc_data.r, sizeof(oob->le_sc_data.r), r, sizeof(r));
 
-	shell_print(sh, "OOB data:");
-	shell_print(sh, "%-29s %-32s %-32s", "addr", "random", "confirm");
-	shell_print(sh, "%29s %32s %32s", addr, r, c);
+	printk("OOB data:");
+	printk("%-29s %-32s %-32s", "addr", "random", "confirm");
+	printk("%29s %32s %32s", addr, r, c);
 }
 
 static void connected(struct bt_conn *conn, uint8_t err)
@@ -767,7 +763,7 @@ static int cmd_init(const struct shell *sh, size_t argc, char *argv[])
 	} else {
 		err = bt_enable(bt_ready);
 		if (err) {
-			shell_error(sh, "Bluetooth init failed (err %d)",
+			printk("Bluetooth init failed (err %d)",
 				    err);
 		}
 	}
@@ -788,11 +784,11 @@ static int cmd_settings_load(const struct shell *sh, size_t argc,
 
 	err = settings_load();
 	if (err) {
-		shell_error(sh, "Settings load failed (err %d)", err);
+		printk("Settings load failed (err %d)", err);
 		return err;
 	}
 
-	shell_print(sh, "Settings loaded");
+	printk("Settings loaded");
 	return 0;
 }
 #endif
@@ -815,14 +811,14 @@ static int cmd_hci_cmd(const struct shell *sh, size_t argc, char *argv[])
 		size_t len;
 
 		if (strlen(argv[3]) > 2 * HCI_CMD_MAX_PARAM) {
-			shell_error(sh, "Data field too large\n");
+			printk("Data field too large\n");
 			return -ENOEXEC;
 		}
 
 		len = hex2bin(argv[3], strlen(argv[3]), &hex_data[hex_data_len],
 			      sizeof(hex_data) - hex_data_len);
 		if (!len) {
-			shell_error(sh, "HCI command illegal data field\n");
+			printk("HCI command illegal data field\n");
 			return -ENOEXEC;
 		}
 
@@ -832,7 +828,7 @@ static int cmd_hci_cmd(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_hci_cmd_send_sync(BT_OP(ogf, ocf), buf, &rsp);
 	if (err) {
-		shell_error(sh, "HCI command failed (err %d)", err);
+		printk("HCI command failed (err %d)", err);
 		return err;
 	} else {
 		shell_hexdump(sh, rsp->data, rsp->len);
@@ -848,13 +844,13 @@ static int cmd_name(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 
 	if (argc < 2) {
-		shell_print(sh, "Bluetooth Local Name: %s", bt_get_name());
+		printk("Bluetooth Local Name: %s", bt_get_name());
 		return 0;
 	}
 
 	err = bt_set_name(argv[1]);
 	if (err) {
-		shell_error(sh, "Unable to set name %s (err %d)", argv[1],
+		printk("Unable to set name %s (err %d)", argv[1],
 			    err);
 		return err;
 	}
@@ -865,7 +861,7 @@ static int cmd_name(const struct shell *sh, size_t argc, char *argv[])
 static int cmd_appearance(const struct shell *sh, size_t argc, char *argv[])
 {
 	if (argc == 1) {
-		shell_print(sh, "Bluetooth Appearance: 0x%04x", bt_get_appearance());
+		printk("Bluetooth Appearance: 0x%04x", bt_get_appearance());
 		return 0;
 	}
 
@@ -877,7 +873,7 @@ static int cmd_appearance(const struct shell *sh, size_t argc, char *argv[])
 	val = argv[1];
 	if (strlen(val) != 6 || strncmp(val, "0x", 2) ||
 	    !hex2bin(&val[2], strlen(&val[2]), ((uint8_t *)&app), sizeof(app))) {
-		shell_error(sh, "Argument must be 0x followed by exactly 4 hex digits.");
+		printk("Argument must be 0x followed by exactly 4 hex digits.");
 		return -EINVAL;
 	}
 
@@ -885,7 +881,7 @@ static int cmd_appearance(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_set_appearance(app);
 	if (err) {
-		shell_error(sh, "bt_set_appearance(0x%04x) failed with err %d", app, err);
+		printk("bt_set_appearance(0x%04x) failed with err %d", app, err);
 		return err;
 	}
 #endif /* defined(CONFIG_BT_DEVICE_APPEARANCE_DYNAMIC) */
@@ -902,7 +898,7 @@ static int cmd_id_create(const struct shell *sh, size_t argc, char *argv[])
 	if (argc > 1) {
 		err = bt_addr_le_from_str(argv[1], "random", &addr);
 		if (err) {
-			shell_error(sh, "Invalid address");
+			printk("Invalid address");
 		}
 	} else {
 		bt_addr_le_copy(&addr, BT_ADDR_LE_ANY);
@@ -910,12 +906,12 @@ static int cmd_id_create(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_id_create(&addr, NULL);
 	if (err < 0) {
-		shell_error(sh, "Creating new ID failed (err %d)", err);
+		printk("Creating new ID failed (err %d)", err);
 		return err;
 	}
 
 	bt_addr_le_to_str(&addr, addr_str, sizeof(addr_str));
-	shell_print(sh, "New identity (%d) created: %s", err, addr_str);
+	printk("New identity (%d) created: %s", err, addr_str);
 
 	return 0;
 }
@@ -928,7 +924,7 @@ static int cmd_id_reset(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 
 	if (argc < 2) {
-		shell_error(sh, "Identity identifier not specified");
+		printk("Identity identifier not specified");
 		return -ENOEXEC;
 	}
 
@@ -937,7 +933,7 @@ static int cmd_id_reset(const struct shell *sh, size_t argc, char *argv[])
 	if (argc > 2) {
 		err = bt_addr_le_from_str(argv[2], "random", &addr);
 		if (err) {
-			shell_print(sh, "Invalid address");
+			printk("Invalid address");
 			return err;
 		}
 	} else {
@@ -946,12 +942,12 @@ static int cmd_id_reset(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_id_reset(id, &addr, NULL);
 	if (err < 0) {
-		shell_print(sh, "Resetting ID %u failed (err %d)", id, err);
+		printk("Resetting ID %u failed (err %d)", id, err);
 		return err;
 	}
 
 	bt_addr_le_to_str(&addr, addr_str, sizeof(addr_str));
-	shell_print(sh, "Identity %u reset: %s", id, addr_str);
+	printk("Identity %u reset: %s", id, addr_str);
 
 	return 0;
 }
@@ -962,7 +958,7 @@ static int cmd_id_delete(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 
 	if (argc < 2) {
-		shell_error(sh, "Identity identifier not specified");
+		printk("Identity identifier not specified");
 		return -ENOEXEC;
 	}
 
@@ -970,11 +966,11 @@ static int cmd_id_delete(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_id_delete(id);
 	if (err < 0) {
-		shell_error(sh, "Deleting ID %u failed (err %d)", id, err);
+		printk("Deleting ID %u failed (err %d)", id, err);
 		return err;
 	}
 
-	shell_print(sh, "Identity %u deleted", id);
+	printk("Identity %u deleted", id);
 
 	return 0;
 }
@@ -990,7 +986,7 @@ static int cmd_id_show(const struct shell *sh, size_t argc, char *argv[])
 		char addr_str[BT_ADDR_LE_STR_LEN];
 
 		bt_addr_le_to_str(&addrs[i], addr_str, sizeof(addr_str));
-		shell_print(sh, "%s%zu: %s", i == selected_id ? "*" : " ", i,
+		printk("%s%zu: %s", i == selected_id ? "*" : " ", i,
 		      addr_str);
 	}
 
@@ -1008,12 +1004,12 @@ static int cmd_id_select(const struct shell *sh, size_t argc, char *argv[])
 
 	bt_id_get(addrs, &count);
 	if (count <= id) {
-		shell_error(sh, "Invalid identity");
+		printk("Invalid identity");
 		return -ENOEXEC;
 	}
 
 	bt_addr_le_to_str(&addrs[id], addr_str, sizeof(addr_str));
-	shell_print(sh, "Selected identity: %s", addr_str);
+	printk("Selected identity: %s", addr_str);
 	selected_id = id;
 
 	return 0;
@@ -1035,11 +1031,11 @@ static int cmd_active_scan_on(const struct shell *sh, uint32_t options,
 
 	err = bt_le_scan_start(&param, NULL);
 	if (err) {
-		shell_error(sh, "Bluetooth set active scan failed "
+		printk("Bluetooth set active scan failed "
 		      "(err %d)", err);
 		return err;
 	} else {
-		shell_print(sh, "Bluetooth active scan enabled");
+		printk("Bluetooth active scan enabled");
 	}
 
 	return 0;
@@ -1060,11 +1056,11 @@ static int cmd_passive_scan_on(const struct shell *sh, uint32_t options,
 
 	err = bt_le_scan_start(&param, NULL);
 	if (err) {
-		shell_error(sh, "Bluetooth set passive scan failed "
+		printk("Bluetooth set passive scan failed "
 			    "(err %d)", err);
 		return err;
 	} else {
-		shell_print(sh, "Bluetooth passive scan enabled");
+		printk("Bluetooth passive scan enabled");
 	}
 
 	return 0;
@@ -1076,10 +1072,11 @@ static int cmd_scan_off(const struct shell *sh)
 
 	err = bt_le_scan_stop();
 	if (err) {
-		shell_error(sh, "Stopping scanning failed (err %d)", err);
+		printk("Stopping scanning failed (err %d)", err);
 		return err;
 	} else {
-		shell_print(sh, "Scan successfully stopped");
+		printk("Scan successfully stopped");
+		printk("Scan successfully stopped");
 	}
 
 	return 0;
@@ -1192,16 +1189,16 @@ static int cmd_scan_filter_set_rssi(const struct shell *sh, size_t argc, char *a
 		if (IN_RANGE(rssi, INT8_MIN, INT8_MAX)) {
 			scan_filter.rssi = (int8_t)rssi;
 			scan_filter.rssi_set = true;
-			shell_print(sh, "RSSI cutoff set at %d dB", scan_filter.rssi);
+			printk("RSSI cutoff set at %d dB", scan_filter.rssi);
 
 			return 0;
 		}
 
-		shell_print(sh, "value out of bounds (%d to %d)", INT8_MIN, INT8_MAX);
+		printk("value out of bounds (%d to %d)", INT8_MIN, INT8_MAX);
 		err = -ERANGE;
 	}
 
-	shell_print(sh, "error %d", err);
+	printk("error %d", err);
 	shell_help(sh);
 
 	return SHELL_CMD_HELP_PRINTED;
@@ -1221,20 +1218,20 @@ static int cmd_scan_filter_set_pa_interval(const struct shell *sh, size_t argc,
 			     BT_GAP_PER_ADV_MAX_INTERVAL)) {
 			scan_filter.pa_interval = (uint16_t)pa_interval;
 			scan_filter.pa_interval_set = true;
-			shell_print(sh, "PA interval cutoff set at %u",
+			printk("PA interval cutoff set at %u",
 				    scan_filter.pa_interval);
 
 			return 0;
 		}
 
-		shell_print(sh, "value out of bounds (%d to %d)",
+		printk("value out of bounds (%d to %d)",
 			    BT_GAP_PER_ADV_MIN_INTERVAL,
 			    BT_GAP_PER_ADV_MAX_INTERVAL);
 
 		err = -ERANGE;
 	}
 
-	shell_print(sh, "error %d", err);
+	printk("error %d", err);
 	shell_help(sh);
 
 	return SHELL_CMD_HELP_PRINTED;
@@ -1354,10 +1351,10 @@ static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
 
 	if (!strcmp(argv[1], "off")) {
 		if (bt_le_adv_stop() < 0) {
-			shell_error(sh, "Failed to stop advertising");
+			printk("Failed to stop advertising");
 			return -ENOEXEC;
 		} else {
-			shell_print(sh, "Advertising stopped");
+			printk("Advertising stopped");
 		}
 
 		return 0;
@@ -1427,11 +1424,11 @@ static int cmd_advertise(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_le_adv_start(&param, ad_len > 0 ? ad : NULL, ad_len, NULL, 0);
 	if (err < 0) {
-		shell_error(sh, "Failed to start advertising (err %d)",
+		printk("Failed to start advertising (err %d)",
 			    err);
 		return err;
 	} else {
-		shell_print(sh, "Advertising started");
+		printk("Advertising started");
 	}
 
 	return 0;
@@ -1452,7 +1449,7 @@ static int cmd_directed_adv(const struct shell *sh,
 	err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 	param = *BT_LE_ADV_CONN_DIR(&addr);
 	if (err) {
-		shell_error(sh, "Invalid peer address (err %d)", err);
+		printk("Invalid peer address (err %d)", err);
 		return err;
 	}
 
@@ -1481,11 +1478,11 @@ static int cmd_directed_adv(const struct shell *sh,
 
 	err = bt_le_adv_start(&param, NULL, 0, NULL, 0);
 	if (err) {
-		shell_error(sh, "Failed to start directed advertising (%d)",
+		printk("Failed to start directed advertising (%d)",
 			    err);
 		return -ENOEXEC;
 	} else {
-		shell_print(sh, "Started directed advertising");
+		printk("Started directed advertising");
 	}
 
 	return 0;
@@ -1595,7 +1592,7 @@ static int cmd_adv_create(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_le_ext_adv_create(&param, &adv_callbacks, &adv);
 	if (err) {
-		shell_error(sh, "Failed to create advertiser set (%d)", err);
+		printk("Failed to create advertiser set (%d)", err);
 		return -ENOEXEC;
 	}
 
@@ -1608,7 +1605,7 @@ static int cmd_adv_create(const struct shell *sh, size_t argc, char *argv[])
 	atomic_set_bit_to(adv_set_opt[adv_index], SHELL_ADV_OPT_EXT_ADV,
 			  (param.options & BT_LE_ADV_OPT_EXT_ADV) > 0);
 
-	shell_print(sh, "Created adv id: %d, adv: %p", adv_index, adv);
+	printk("Created adv id: %d, adv: %p", adv_index, adv);
 
 	return 0;
 }
@@ -1626,7 +1623,7 @@ static int cmd_adv_param(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_le_ext_adv_update_param(adv, &param);
 	if (err) {
-		shell_error(sh, "Failed to update advertiser set (%d)", err);
+		printk("Failed to update advertiser set (%d)", err);
 		return -ENOEXEC;
 	}
 
@@ -1662,7 +1659,7 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 		if (strcmp(arg, "scan-response") &&
 		    *data_len == ARRAY_SIZE(ad)) {
 			/* Maximum entries limit reached. */
-			shell_print(sh, "Failed to set advertising data: "
+			printk("Failed to set advertising data: "
 					   "Maximum entries limit reached");
 
 			return -ENOEXEC;
@@ -1676,7 +1673,7 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 			appearance = true;
 		} else if (!strcmp(arg, "scan-response")) {
 			if (data == sd) {
-				shell_print(sh, "Failed to set advertising data: "
+				printk("Failed to set advertising data: "
 						   "duplicate scan-response option");
 				return -ENOEXEC;
 			}
@@ -1690,7 +1687,7 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 				      sizeof(hex_data) - hex_data_len);
 
 			if (!len || (len - 1) != (hex_data[hex_data_len])) {
-				shell_print(sh, "Failed to set advertising data: "
+				printk("Failed to set advertising data: "
 						   "malformed hex data");
 				return -ENOEXEC;
 			}
@@ -1715,7 +1712,7 @@ static int cmd_adv_data(const struct shell *sh, size_t argc, char *argv[])
 	err = bt_le_ext_adv_set_data(adv, ad_len > 0 ? ad : NULL, ad_len,
 					  sd_len > 0 ? sd : NULL, sd_len);
 	if (err) {
-		shell_print(sh, "Failed to set advertising set data (%d)",
+		printk("Failed to set advertising set data (%d)",
 			    err);
 		return -ENOEXEC;
 	}
@@ -1732,7 +1729,7 @@ static int cmd_adv_start(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 
 	if (!adv) {
-		shell_print(sh, "Advertiser[%d] not created", selected_adv);
+		printk("Advertiser[%d] not created", selected_adv);
 		return -EINVAL;
 	}
 
@@ -1761,11 +1758,11 @@ static int cmd_adv_start(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_le_ext_adv_start(adv, &param);
 	if (err) {
-		shell_print(sh, "Failed to start advertising set (%d)", err);
+		printk("Failed to start advertising set (%d)", err);
 		return -ENOEXEC;
 	}
 
-	shell_print(sh, "Advertiser[%d] %p set started", selected_adv, adv);
+	printk("Advertiser[%d] %p set started", selected_adv, adv);
 	return 0;
 
 fail_show_help:
@@ -1779,17 +1776,17 @@ static int cmd_adv_stop(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 
 	if (!adv) {
-		shell_print(sh, "Advertiser[%d] not created", selected_adv);
+		printk("Advertiser[%d] not created", selected_adv);
 		return -EINVAL;
 	}
 
 	err = bt_le_ext_adv_stop(adv);
 	if (err) {
-		shell_print(sh, "Failed to stop advertising set (%d)", err);
+		printk("Failed to stop advertising set (%d)", err);
 		return -ENOEXEC;
 	}
 
-	shell_print(sh, "Advertiser set stopped");
+	printk("Advertiser set stopped");
 	return 0;
 }
 
@@ -1799,7 +1796,7 @@ static int cmd_adv_delete(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 
 	if (!adv) {
-		shell_print(sh, "Advertiser[%d] not created", selected_adv);
+		printk("Advertiser[%d] not created", selected_adv);
 		return -EINVAL;
 	}
 
@@ -1828,7 +1825,7 @@ static int cmd_adv_select(const struct shell *sh, size_t argc, char *argv[])
 
 	for (int i = 0; i < ARRAY_SIZE(adv_sets); i++) {
 		if (adv_sets[i]) {
-			shell_print(sh, "Advertiser[%d] %p", i, adv_sets[i]);
+			printk("Advertiser[%d] %p", i, adv_sets[i]);
 		}
 	}
 
@@ -1847,12 +1844,12 @@ static int cmd_adv_info(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_le_ext_adv_get_info(adv, &info);
 	if (err) {
-		shell_error(sh, "OOB data failed");
+		printk("OOB data failed");
 		return err;
 	}
 
-	shell_print(sh, "Advertiser[%d] %p", selected_adv, adv);
-	shell_print(sh, "Id: %d, TX power: %d dBm", info.id, info.tx_power);
+	printk("Advertiser[%d] %p", selected_adv, adv);
+	printk("Id: %d, TX power: %d dBm", info.id, info.tx_power);
 	print_le_addr("Address", info.addr);
 
 	return 0;
@@ -1870,7 +1867,7 @@ static int cmd_adv_oob(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_le_ext_adv_oob_get_local(adv, &oob_local);
 	if (err) {
-		shell_error(sh, "OOB data failed");
+		printk("OOB data failed");
 		return err;
 	}
 
@@ -1885,12 +1882,12 @@ static int cmd_adv_rpa_expire(const struct shell *sh, size_t argc, char *argv[])
 {
 	if (!strcmp(argv[1], "on")) {
 		atomic_clear_bit(adv_set_opt[selected_adv], SHELL_ADV_OPT_KEEP_RPA);
-		shell_print(sh, "RPA will expire on next timeout");
+		printk("RPA will expire on next timeout");
 	} else if (!strcmp(argv[1], "off")) {
 		atomic_set_bit(adv_set_opt[selected_adv], SHELL_ADV_OPT_KEEP_RPA);
-		shell_print(sh, "RPA will not expire on RPA timeout");
+		printk("RPA will not expire on RPA timeout");
 	} else {
-		shell_error(sh, "Invalid argument: %s", argv[1]);
+		printk("Invalid argument: %s", argv[1]);
 		return -EINVAL;
 	}
 
@@ -1904,7 +1901,7 @@ static int cmd_per_adv(const struct shell *sh, size_t argc, char *argv[])
 	struct bt_le_ext_adv *adv = adv_sets[selected_adv];
 
 	if (!adv) {
-		shell_error(sh, "No extended advertisement set selected");
+		printk("No extended advertisement set selected");
 		return -EINVAL;
 	}
 
@@ -1913,17 +1910,17 @@ static int cmd_per_adv(const struct shell *sh, size_t argc, char *argv[])
 			shell_error(sh,
 				    "Failed to stop periodic advertising");
 		} else {
-			shell_print(sh, "Periodic advertising stopped");
+			printk("Periodic advertising stopped");
 		}
 	} else if (!strcmp(argv[1], "on")) {
 		if (bt_le_per_adv_start(adv) < 0) {
 			shell_error(sh,
 				    "Failed to start periodic advertising");
 		} else {
-			shell_print(sh, "Periodic advertising started");
+			printk("Periodic advertising started");
 		}
 	} else {
-		shell_error(sh, "Invalid argument: %s", argv[1]);
+		printk("Invalid argument: %s", argv[1]);
 		return -EINVAL;
 	}
 
@@ -1938,7 +1935,7 @@ static int cmd_per_adv_param(const struct shell *sh, size_t argc,
 	int err;
 
 	if (!adv) {
-		shell_error(sh, "No extended advertisement set selected");
+		printk("No extended advertisement set selected");
 		return -EINVAL;
 	}
 
@@ -1969,7 +1966,7 @@ static int cmd_per_adv_param(const struct shell *sh, size_t argc,
 
 	err = bt_le_per_adv_set_param(adv, &param);
 	if (err) {
-		shell_error(sh, "Failed to set periodic advertising "
+		printk("Failed to set periodic advertising "
 			    "parameters (%d)", err);
 		return -ENOEXEC;
 	}
@@ -1987,7 +1984,7 @@ static int cmd_per_adv_data(const struct shell *sh, size_t argc,
 	int err;
 
 	if (!adv) {
-		shell_error(sh, "No extended advertisement set selected");
+		printk("No extended advertisement set selected");
 		return -EINVAL;
 	}
 
@@ -1995,7 +1992,7 @@ static int cmd_per_adv_data(const struct shell *sh, size_t argc,
 	ad_len = hex2bin(argv[1], strlen(argv[1]), hex_data, sizeof(hex_data));
 
 	if (!ad_len) {
-		shell_error(sh, "Could not parse adv data");
+		printk("Could not parse adv data");
 		return -ENOEXEC;
 	}
 
@@ -2036,13 +2033,13 @@ static int cmd_per_adv_sync_create(const struct shell *sh, size_t argc,
 	}
 
 	if (i == ARRAY_SIZE(per_adv_syncs)) {
-		shell_error(sh, "Cannot create more per adv syncs");
+		printk("Cannot create more per adv syncs");
 		return -ENOEXEC;
 	}
 
 	err = bt_addr_le_from_str(argv[1], argv[2], &create_params.addr);
 	if (err) {
-		shell_error(sh, "Invalid peer address (err %d)", err);
+		printk("Invalid peer address (err %d)", err);
 		return -ENOEXEC;
 	}
 
@@ -2088,9 +2085,9 @@ static int cmd_per_adv_sync_create(const struct shell *sh, size_t argc,
 
 	err = bt_le_per_adv_sync_create(&create_params, free_per_adv_sync);
 	if (err) {
-		shell_error(sh, "Per adv sync failed (%d)", err);
+		printk("Per adv sync failed (%d)", err);
 	} else {
-		shell_print(sh, "Per adv sync pending");
+		printk("Per adv sync pending");
 	}
 
 	return 0;
@@ -2110,7 +2107,7 @@ static int cmd_per_adv_sync_delete(const struct shell *sh, size_t argc,
 	}
 
 	if (index >= ARRAY_SIZE(per_adv_syncs)) {
-		shell_error(sh, "Maximum index is %zu but %d was requested",
+		printk("Maximum index is %zu but %d was requested",
 			    ARRAY_SIZE(per_adv_syncs) - 1, index);
 	}
 
@@ -2123,9 +2120,9 @@ static int cmd_per_adv_sync_delete(const struct shell *sh, size_t argc,
 	err = bt_le_per_adv_sync_delete(per_adv_sync);
 
 	if (err) {
-		shell_error(sh, "Per adv sync delete failed (%d)", err);
+		printk("Per adv sync delete failed (%d)", err);
 	} else {
-		shell_print(sh, "Per adv sync deleted");
+		printk("Per adv sync deleted");
 		per_adv_syncs[index] = NULL;
 	}
 
@@ -2142,7 +2139,7 @@ static int cmd_past_subscribe(const struct shell *sh, size_t argc,
 	bool global = true;
 
 	if (i == ARRAY_SIZE(per_adv_syncs)) {
-		shell_error(sh, "Cannot create more per adv syncs");
+		printk("Cannot create more per adv syncs");
 		return -ENOEXEC;
 	}
 
@@ -2180,7 +2177,7 @@ static int cmd_past_subscribe(const struct shell *sh, size_t argc,
 			param.skip = strtoul(argv[i], NULL, 16);
 		} else if (!strcmp(argv[i], "conn")) {
 			if (!default_conn) {
-				shell_print(sh, "Not connected");
+				printk("Not connected");
 				return -EINVAL;
 			}
 			global = false;
@@ -2196,9 +2193,9 @@ static int cmd_past_subscribe(const struct shell *sh, size_t argc,
 		global ? NULL : default_conn, &param);
 
 	if (err) {
-		shell_error(sh, "PAST subscribe failed (%d)", err);
+		printk("PAST subscribe failed (%d)", err);
 	} else {
-		shell_print(sh, "Subscribed to PAST");
+		printk("Subscribed to PAST");
 	}
 
 	return 0;
@@ -2216,7 +2213,7 @@ static int cmd_past_unsubscribe(const struct shell *sh, size_t argc,
 					bt_le_per_adv_sync_transfer_unsubscribe(
 						default_conn);
 			} else {
-				shell_print(sh, "Not connected");
+				printk("Not connected");
 				return -EINVAL;
 			}
 		} else {
@@ -2228,7 +2225,7 @@ static int cmd_past_unsubscribe(const struct shell *sh, size_t argc,
 	}
 
 	if (err) {
-		shell_error(sh, "PAST unsubscribe failed (%d)", err);
+		printk("PAST unsubscribe failed (%d)", err);
 	}
 
 	return err;
@@ -2250,7 +2247,7 @@ static int cmd_per_adv_sync_transfer(const struct shell *sh, size_t argc,
 	}
 
 	if (index >= ARRAY_SIZE(per_adv_syncs)) {
-		shell_error(sh, "Maximum index is %zu but %d was requested",
+		printk("Maximum index is %zu but %d was requested",
 			    ARRAY_SIZE(per_adv_syncs) - 1, index);
 	}
 
@@ -2261,7 +2258,7 @@ static int cmd_per_adv_sync_transfer(const struct shell *sh, size_t argc,
 
 	err = bt_le_per_adv_sync_transfer(per_adv_sync, default_conn, 0);
 	if (err) {
-		shell_error(sh, "Periodic advertising sync transfer failed (%d)", err);
+		printk("Periodic advertising sync transfer failed (%d)", err);
 	}
 
 	return err;
@@ -2283,7 +2280,7 @@ static int cmd_connect_le(const struct shell *sh, size_t argc, char *argv[])
 		if (auto_connect.addr_set) {
 			bt_addr_le_copy(&addr, &auto_connect.addr);
 		} else {
-			shell_error(sh, "No connectable adv stored, please trigger a scan first.");
+			printk("No connectable adv stored, please trigger a scan first.");
 			shell_help(sh);
 
 			return SHELL_CMD_HELP_PRINTED;
@@ -2291,7 +2288,7 @@ static int cmd_connect_le(const struct shell *sh, size_t argc, char *argv[])
 	} else {
 		err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 		if (err) {
-			shell_error(sh, "Invalid peer address (err %d)", err);
+			printk("Invalid peer address (err %d)", err);
 			return err;
 		}
 	}
@@ -2319,11 +2316,11 @@ static int cmd_connect_le(const struct shell *sh, size_t argc, char *argv[])
 	err = bt_conn_le_create(&addr, create_params, BT_LE_CONN_PARAM_DEFAULT,
 				&conn);
 	if (err) {
-		shell_error(sh, "Connection failed (%d)", err);
+		printk("Connection failed (%d)", err);
 		return -ENOEXEC;
 	} else {
 
-		shell_print(sh, "Connection pending");
+		printk("Connection pending");
 
 		/* unref connection obj in advance as app user */
 		bt_conn_unref(conn);
@@ -2340,7 +2337,7 @@ static int cmd_auto_conn(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 	if (err) {
-		shell_error(sh, "Invalid peer address (err %d)", err);
+		printk("Invalid peer address (err %d)", err);
 		return err;
 	}
 
@@ -2384,11 +2381,11 @@ static int cmd_connect_le_name(const struct shell *sh, size_t argc, char *argv[]
 
 	err = bt_le_scan_start(&param, NULL);
 	if (err) {
-		shell_error(sh, "Bluetooth scan failed (err %d)", err);
+		printk("Bluetooth scan failed (err %d)", err);
 		return err;
 	}
 
-	shell_print(sh, "Bluetooth active scan enabled");
+	printk("Bluetooth active scan enabled");
 
 	/* Set boolean to tell the scan callback to connect to this name */
 	auto_connect.connect_name = true;
@@ -2414,7 +2411,7 @@ static int cmd_disconnect(const struct shell *sh, size_t argc, char *argv[])
 
 		err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 		if (err) {
-			shell_error(sh, "Invalid peer address (err %d)",
+			printk("Invalid peer address (err %d)",
 				    err);
 			return err;
 		}
@@ -2423,13 +2420,13 @@ static int cmd_disconnect(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	if (!conn) {
-		shell_error(sh, "Not connected");
+		printk("Not connected");
 		return -ENOEXEC;
 	}
 
 	err = bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 	if (err) {
-		shell_error(sh, "Disconnection failed (err %d)", err);
+		printk("Disconnection failed (err %d)", err);
 		return err;
 	}
 
@@ -2446,13 +2443,13 @@ static int cmd_select(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 	if (err) {
-		shell_error(sh, "Invalid peer address (err %d)", err);
+		printk("Invalid peer address (err %d)", err);
 		return err;
 	}
 
 	conn = bt_conn_lookup_addr_le(selected_id, &addr);
 	if (!conn) {
-		shell_error(sh, "No matching connection found");
+		printk("No matching connection found");
 		return -ENOEXEC;
 	}
 
@@ -2501,7 +2498,7 @@ static int cmd_info(const struct shell *sh, size_t argc, char *argv[])
 		addr.type = BT_ADDR_LE_PUBLIC;
 		err = bt_addr_from_str(argv[1], &addr.a);
 		if (err) {
-			shell_error(sh, "Invalid peer address (err %d)",
+			printk("Invalid peer address (err %d)",
 				    err);
 			return err;
 		}
@@ -2511,7 +2508,7 @@ static int cmd_info(const struct shell *sh, size_t argc, char *argv[])
 		err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 
 		if (err) {
-			shell_error(sh, "Invalid peer address (err %d)",
+			printk("Invalid peer address (err %d)",
 				    err);
 			return err;
 		}
@@ -2520,7 +2517,7 @@ static int cmd_info(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	if (!conn) {
-		shell_error(sh, "Not connected");
+		printk("Not connected");
 		return -ENOEXEC;
 	}
 
@@ -2598,9 +2595,9 @@ static int cmd_conn_update(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_conn_le_param_update(default_conn, &param);
 	if (err) {
-		shell_error(sh, "conn update failed (err %d).", err);
+		printk("conn update failed (err %d).", err);
 	} else {
-		shell_print(sh, "conn update initiated.");
+		printk("conn update initiated.");
 	}
 
 	return err;
@@ -2657,16 +2654,16 @@ static int cmd_conn_data_len_update(const struct shell *sh, size_t argc,
 		}
 #endif
 		param.tx_max_time = tx_time_calc(phy, param.tx_max_len);
-		shell_print(sh, "Calculated tx time: %d", param.tx_max_time);
+		printk("Calculated tx time: %d", param.tx_max_time);
 	}
 
 
 
 	err = bt_conn_le_data_len_update(default_conn, &param);
 	if (err) {
-		shell_error(sh, "data len update failed (err %d).", err);
+		printk("data len update failed (err %d).", err);
 	} else {
-		shell_print(sh, "data len update initiated.");
+		printk("data len update initiated.");
 	}
 
 	return err;
@@ -2705,9 +2702,9 @@ static int cmd_conn_phy_update(const struct shell *sh, size_t argc,
 
 	err = bt_conn_le_phy_update(default_conn, &param);
 	if (err) {
-		shell_error(sh, "PHY update failed (err %d).", err);
+		printk("PHY update failed (err %d).", err);
 	} else {
-		shell_print(sh, "PHY update initiated.");
+		printk("PHY update initiated.");
 	}
 
 	return err;
@@ -2721,16 +2718,16 @@ static int cmd_chan_map(const struct shell *sh, size_t argc, char *argv[])
 	int err;
 
 	if (hex2bin(argv[1], strlen(argv[1]), chan_map, 5) == 0) {
-		shell_error(sh, "Invalid channel map");
+		printk("Invalid channel map");
 		return -ENOEXEC;
 	}
 	sys_mem_swap(chan_map, 5);
 
 	err = bt_le_set_chan_map(chan_map);
 	if (err) {
-		shell_error(sh, "Failed to set channel map (err %d)", err);
+		printk("Failed to set channel map (err %d)", err);
 	} else {
-		shell_print(sh, "Channel map set");
+		printk("Channel map set");
 	}
 
 	return err;
@@ -2743,7 +2740,7 @@ static int cmd_oob(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_le_oob_get_local(selected_id, &oob_local);
 	if (err) {
-		shell_error(sh, "OOB data failed");
+		printk("OOB data failed");
 		return err;
 	}
 
@@ -2761,7 +2758,7 @@ static int cmd_oob_remote(const struct shell *sh, size_t argc,
 
 	err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 	if (err) {
-		shell_error(sh, "Invalid peer address (err %d)", err);
+		printk("Invalid peer address (err %d)", err);
 		return err;
 	}
 
@@ -2798,11 +2795,11 @@ static int cmd_clear(const struct shell *sh, size_t argc, char *argv[])
 	if (strcmp(argv[1], "all") == 0) {
 		err = bt_unpair(selected_id, NULL);
 		if (err) {
-			shell_error(sh, "Failed to clear pairings (err %d)",
+			printk("Failed to clear pairings (err %d)",
 			      err);
 			return err;
 		} else {
-			shell_print(sh, "Pairings successfully cleared");
+			printk("Pairings successfully cleared");
 		}
 
 		return 0;
@@ -2813,7 +2810,7 @@ static int cmd_clear(const struct shell *sh, size_t argc, char *argv[])
 		addr.type = BT_ADDR_LE_PUBLIC;
 		err = bt_addr_from_str(argv[1], &addr.a);
 #else
-		shell_print(sh, "Both address and address type needed");
+		printk("Both address and address type needed");
 		return -ENOEXEC;
 #endif
 	} else {
@@ -2821,15 +2818,15 @@ static int cmd_clear(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	if (err) {
-		shell_print(sh, "Invalid address");
+		printk("Invalid address");
 		return err;
 	}
 
 	err = bt_unpair(selected_id, &addr);
 	if (err) {
-		shell_error(sh, "Failed to clear pairing (err %d)", err);
+		printk("Failed to clear pairing (err %d)", err);
 	} else {
-		shell_print(sh, "Pairing successfully cleared");
+		printk("Pairing successfully cleared");
 	}
 
 	return err;
@@ -2843,12 +2840,12 @@ static int cmd_security(const struct shell *sh, size_t argc, char *argv[])
 	struct bt_conn_info info;
 
 	if (!default_conn || (bt_conn_get_info(default_conn, &info) < 0)) {
-		shell_error(sh, "Not connected");
+		printk("Not connected");
 		return -ENOEXEC;
 	}
 
 	if (argc < 2) {
-		shell_print(sh, "BT_SECURITY_L%d", bt_conn_get_security(default_conn));
+		printk("BT_SECURITY_L%d", bt_conn_get_security(default_conn));
 
 		return 0;
 	}
@@ -2857,13 +2854,13 @@ static int cmd_security(const struct shell *sh, size_t argc, char *argv[])
 
 	if ((info.type == BT_CONN_TYPE_BR &&
 	    (sec < BT_SECURITY_L0 || sec > BT_SECURITY_L3))) {
-		shell_error(sh, "Invalid BR/EDR security level (%d)", sec);
+		printk("Invalid BR/EDR security level (%d)", sec);
 		return -ENOEXEC;
 	}
 
 	if ((info.type == BT_CONN_TYPE_LE &&
 	    (sec < BT_SECURITY_L1 || sec > BT_SECURITY_L4))) {
-		shell_error(sh, "Invalid LE security level (%d)", sec);
+		printk("Invalid LE security level (%d)", sec);
 		return -ENOEXEC;
 	}
 
@@ -2878,7 +2875,7 @@ static int cmd_security(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_conn_set_security(default_conn, sec);
 	if (err) {
-		shell_error(sh, "Setting security failed (err %d)", err);
+		printk("Setting security failed (err %d)", err);
 	}
 
 	return err;
@@ -2915,9 +2912,9 @@ static int cmd_bonds(const struct shell *sh, size_t argc, char *argv[])
 {
 	int bond_count = 0;
 
-	shell_print(sh, "Bonded devices:");
+	printk("Bonded devices:");
 	bt_foreach_bond(selected_id, bond_info, &bond_count);
-	shell_print(sh, "Total %d", bond_count);
+	printk("Total %d", bond_count);
 
 	return 0;
 }
@@ -2975,9 +2972,9 @@ static int cmd_connections(const struct shell *sh, size_t argc, char *argv[])
 {
 	int conn_count = 0;
 
-	shell_print(sh, "Connected devices:");
+	printk("Connected devices:");
 	bt_conn_foreach(BT_CONN_TYPE_ALL, connection_info, &conn_count);
-	shell_print(sh, "Total %d", conn_count);
+	printk("Total %d", conn_count);
 
 	return 0;
 }
@@ -3313,7 +3310,7 @@ static int cmd_auth(const struct shell *sh, size_t argc, char *argv[])
 	}
 
 	if (err) {
-		shell_error(sh, "Failed to set auth handlers (%d)", err);
+		printk("Failed to set auth handlers (%d)", err);
 	}
 
 	return err;
@@ -3333,7 +3330,7 @@ static int cmd_auth_cancel(const struct shell *sh,
 	}
 
 	if (!conn) {
-		shell_print(sh, "Not connected");
+		printk("Not connected");
 		return -ENOEXEC;
 	}
 
@@ -3346,7 +3343,7 @@ static int cmd_auth_passkey_confirm(const struct shell *sh,
 				    size_t argc, char *argv[])
 {
 	if (!default_conn) {
-		shell_print(sh, "Not connected");
+		printk("Not connected");
 		return -ENOEXEC;
 	}
 
@@ -3358,7 +3355,7 @@ static int cmd_auth_pairing_confirm(const struct shell *sh,
 				    size_t argc, char *argv[])
 {
 	if (!default_conn) {
-		shell_print(sh, "Not connected");
+		printk("Not connected");
 		return -ENOEXEC;
 	}
 
@@ -3374,13 +3371,13 @@ static int cmd_fal_add(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 	if (err) {
-		shell_error(sh, "Invalid peer address (err %d)", err);
+		printk("Invalid peer address (err %d)", err);
 		return err;
 	}
 
 	err = bt_le_filter_accept_list_add(&addr);
 	if (err) {
-		shell_error(sh, "Add to fa list failed (err %d)", err);
+		printk("Add to fa list failed (err %d)", err);
 		return err;
 	}
 
@@ -3394,13 +3391,13 @@ static int cmd_fal_rem(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_addr_le_from_str(argv[1], argv[2], &addr);
 	if (err) {
-		shell_error(sh, "Invalid peer address (err %d)", err);
+		printk("Invalid peer address (err %d)", err);
 		return err;
 	}
 
 	err = bt_le_filter_accept_list_remove(&addr);
 	if (err) {
-		shell_error(sh, "Remove from fa list failed (err %d)",
+		printk("Remove from fa list failed (err %d)",
 			    err);
 		return err;
 	}
@@ -3413,7 +3410,7 @@ static int cmd_fal_clear(const struct shell *sh, size_t argc, char *argv[])
 
 	err = bt_le_filter_accept_list_clear();
 	if (err) {
-		shell_error(sh, "Clearing fa list failed (err %d)", err);
+		printk("Clearing fa list failed (err %d)", err);
 		return err;
 	}
 
@@ -3450,13 +3447,13 @@ static int cmd_fal_connect(const struct shell *sh, size_t argc, char *argv[])
 		err = bt_conn_le_create_auto(create_params,
 					     BT_LE_CONN_PARAM_DEFAULT);
 		if (err) {
-			shell_error(sh, "Auto connect failed (err %d)", err);
+			printk("Auto connect failed (err %d)", err);
 			return err;
 		}
 	} else if (!strcmp(action, "off")) {
 		err = bt_conn_create_auto_stop();
 		if (err) {
-			shell_error(sh, "Auto connect stop failed (err %d)",
+			printk("Auto connect stop failed (err %d)",
 				    err);
 		}
 		return err;
@@ -3476,19 +3473,19 @@ static int cmd_fixed_passkey(const struct shell *sh,
 
 	if (argc < 2) {
 		bt_passkey_set(BT_PASSKEY_INVALID);
-		shell_print(sh, "Fixed passkey cleared");
+		printk("Fixed passkey cleared");
 		return 0;
 	}
 
 	passkey = atoi(argv[1]);
 	if (passkey > 999999) {
-		shell_print(sh, "Passkey should be between 0-999999");
+		printk("Passkey should be between 0-999999");
 		return -ENOEXEC;
 	}
 
 	err = bt_passkey_set(passkey);
 	if (err) {
-		shell_print(sh, "Setting fixed passkey failed (err %d)",
+		printk("Setting fixed passkey failed (err %d)",
 			    err);
 	}
 
@@ -3503,19 +3500,19 @@ static int cmd_auth_passkey(const struct shell *sh,
 	int err;
 
 	if (!default_conn) {
-		shell_print(sh, "Not connected");
+		printk("Not connected");
 		return -ENOEXEC;
 	}
 
 	passkey = atoi(argv[1]);
 	if (passkey > 999999) {
-		shell_print(sh, "Passkey should be between 0-999999");
+		printk("Passkey should be between 0-999999");
 		return -EINVAL;
 	}
 
 	err = bt_conn_auth_passkey_entry(default_conn, passkey);
 	if (err) {
-		shell_error(sh, "Failed to set passkey (%d)", err);
+		printk("Failed to set passkey (%d)", err);
 		return err;
 	}
 
@@ -3531,13 +3528,13 @@ static int cmd_auth_oob_tk(const struct shell *sh, size_t argc, char *argv[])
 
 	len = hex2bin(argv[1], strlen(argv[1]), tk, sizeof(tk));
 	if (len != sizeof(tk)) {
-		shell_error(sh, "TK should be 16 bytes");
+		printk("TK should be 16 bytes");
 		return -EINVAL;
 	}
 
 	err = bt_le_oob_set_legacy_tk(default_conn, tk);
 	if (err) {
-		shell_error(sh, "Failed to set TK (%d)", err);
+		printk("Failed to set TK (%d)", err);
 		return err;
 	}
 
@@ -3778,7 +3775,7 @@ static int cmd_bt(const struct shell *sh, size_t argc, char **argv)
 		return SHELL_CMD_HELP_PRINTED;
 	}
 
-	shell_error(sh, "%s unknown parameter: %s", argv[0], argv[1]);
+	printk("%s unknown parameter: %s", argv[0], argv[1]);
 
 	return -EINVAL;
 }
